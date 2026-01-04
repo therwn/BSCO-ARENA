@@ -50,7 +50,7 @@ async function getLobbyFromStore(code: string) {
         code: data.code,
         teams: data.teams,
         waitingList: data.waiting_list || [],
-        createdAt: data.created_at,
+        createdAt: data.created_at ? new Date(data.created_at).getTime() : Date.now(),
       }
     } catch (error) {
       console.error("[Supabase] Lobi okuma hatası:", error)
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
           },
         ],
         waitingList: [],
-        createdAt: Date.now(),
+        createdAt: new Date().toISOString(),
       }
 
       // Yeni lobi kaydet
