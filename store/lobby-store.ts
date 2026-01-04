@@ -19,6 +19,8 @@ interface LobbyState {
   waitingList: Player[]
   currentPlayer: Player | null
   setCurrentPlayer: (player: Player | null) => void
+  setTeams: (teams: Team[]) => void
+  setWaitingList: (waitingList: Player[]) => void
   addToWaitingList: (player: Player) => void
   removeFromWaitingList: (playerId: string) => void
   joinTeamSlot: (teamId: string, slotType: "captain" | "player", slotIndex: number) => void
@@ -49,6 +51,10 @@ export const useLobbyStore = create<LobbyState>((set) => ({
   currentPlayer: null,
 
   setCurrentPlayer: (player) => set({ currentPlayer: player }),
+
+  setTeams: (teams) => set({ teams }),
+
+  setWaitingList: (waitingList) => set({ waitingList }),
 
   addToWaitingList: (player) =>
     set((state) => ({
