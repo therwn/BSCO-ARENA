@@ -110,11 +110,11 @@ async function setLobbyToStore(code: string, lobby: any) {
 
       if (error) {
         console.error("[Supabase] Lobi kaydetme hatası:", {
-          code: lobby.code,
+          lobbyCode: lobby.code,
           error: error.message,
           details: error.details,
           hint: error.hint,
-          code: error.code,
+          errorCode: error.code,
         })
         return false
       }
