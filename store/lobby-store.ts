@@ -65,6 +65,12 @@ export const useLobbyStore = create<LobbyState>((set) => ({
       const currentPlayer = state.currentPlayer
       if (!currentPlayer) return state
 
+      // Oyuncu bekleme listesinde olmalı
+      const isInWaitingList = state.waitingList.some(
+        (p) => p.id === currentPlayer.id
+      )
+      if (!isInWaitingList) return state
+
       // Önce tüm takımlardan mevcut oyuncuyu çıkar
       const newTeams = state.teams.map((t) => {
         // Eğer hedef takım ise, slotu doldur

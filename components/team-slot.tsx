@@ -11,6 +11,7 @@ interface TeamSlotProps {
   slotIndex: number
   teamId: string
   currentPlayerId: string | null
+  isInWaitingList: boolean
   onJoin: () => void
   onLeave: () => void
 }
@@ -21,11 +22,13 @@ export default function TeamSlot({
   slotIndex,
   teamId,
   currentPlayerId,
+  isInWaitingList,
   onJoin,
   onLeave,
 }: TeamSlotProps) {
   const isEmpty = !player
   const isCurrentPlayer = player?.id === currentPlayerId
+  const canJoin = isInWaitingList && isEmpty
 
   return (
     <motion.div
@@ -42,15 +45,21 @@ export default function TeamSlot({
     >
       {isEmpty ? (
         <div className="flex flex-col items-center justify-center h-20 space-y-2">
-          <User className="w-6 h-6 text-gray-600" />
-          <Button
-            onClick={onJoin}
-            variant="ghost"
-            size="sm"
-            className="text-xs text-gray-400 hover:text-white"
-          >
-            Katıl
-          </Button>
+          <User className={`w-6 h-6 ${canJoin ? "text-gray-600" : "text-gray-800"}`} />
+          {canJoin ? (
+            <Button
+              onClick={onJoin}
+              variant="ghost"
+              size="sm"
+              className="text-xs text-gray-400 hover:text-white"
+            >
+              Katıl
+            </Button>
+          ) : (
+            <p className="text-xs text-gray-600 text-center px-2">
+              Önce bekleme listesine katıl
+            </p>
+          )}
         </div>
       ) : (
         <div className="flex items-center justify-between">

@@ -31,8 +31,12 @@ export default function TeamCard({ team }: TeamCardProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [teamName, setTeamName] = useState(team.name)
   const [colorPopoverOpen, setColorPopoverOpen] = useState(false)
-  const { joinTeamSlot, leaveTeamSlot, updateTeamName, updateTeamColor, currentPlayer } =
+  const { joinTeamSlot, leaveTeamSlot, updateTeamName, updateTeamColor, currentPlayer, waitingList } =
     useLobbyStore()
+
+  const isInWaitingList = currentPlayer
+    ? waitingList.some((p) => p.id === currentPlayer.id)
+    : false
 
   const handleSaveName = () => {
     if (teamName.trim()) {
@@ -165,6 +169,7 @@ export default function TeamCard({ team }: TeamCardProps) {
                 slotIndex={0}
                 teamId={team.id}
                 currentPlayerId={currentPlayer?.id || null}
+                isInWaitingList={isInWaitingList}
                 onJoin={() => joinTeamSlot(team.id, "captain", 0)}
                 onLeave={() => leaveTeamSlot(team.id, "captain", 0)}
               />
@@ -181,6 +186,7 @@ export default function TeamCard({ team }: TeamCardProps) {
                   slotIndex={index}
                   teamId={team.id}
                   currentPlayerId={currentPlayer?.id || null}
+                  isInWaitingList={isInWaitingList}
                   onJoin={() => joinTeamSlot(team.id, "player", index)}
                   onLeave={() => leaveTeamSlot(team.id, "player", index)}
                 />
