@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import { kv } from "@vercel/kv"
+import { Redis } from "@upstash/redis"
 
-// Vercel KV kullanarak paylaşımlı store
-// Fallback olarak global variable (development için)
+// Upstash Redis client (environment variable'lar varsa)
+const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+  ? new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    })
+  : null
+
+// Fallback: Development için global variable
 declare global {
   // eslint-disable-next-line no-var
   var lobbies: Map<string, {
@@ -13,28 +20,25 @@ declare global {
   }> | undefined
 }
 
-const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
-
-// Fallback: Development için global variable
-const lobbies = !useKV && (globalThis.lobbies || new Map<string, {
+const lobbies = !redis && (globalThis.lobbies || new Map<string, {
   code: string
   teams: any[]
   waitingList: any[]
   createdAt: number
 }>())
 
-if (!useKV && process.env.NODE_ENV !== "production") {
+if (!redis && process.env.NODE_ENV !== "production") {
   globalThis.lobbies = lobbies as any
 }
 
-// KV'den lobi al
-async function getLobbyFromKV(code: string) {
-  if (useKV) {
+// Redis'ten lobi al
+async function getLobbyFromStore(code: string) {
+  if (redis) {
     try {
-      const lobby = await kv.get(`lobby:${code}`)
+      const lobby = await redis.get(`lobby:${code}`)
       return lobby as any
     } catch (error) {
-      console.error("[KV] Lobi okuma hatası:", error)
+      console.error("[Redis] Lobi okuma hatası:", error)
       return null
     }
   } else {
@@ -42,14 +46,14 @@ async function getLobbyFromKV(code: string) {
   }
 }
 
-// KV'ye lobi kaydet
-async function setLobbyToKV(code: string, lobby: any) {
-  if (useKV) {
+// Redis'e lobi kaydet
+async function setLobbyToStore(code: string, lobby: any) {
+  if (redis) {
     try {
-      await kv.set(`lobby:${code}`, lobby, { ex: 3600 }) // 1 saat TTL
+      await redis.set(`lobby:${code}`, lobby, { ex: 3600 }) // 1 saat TTL
       return true
     } catch (error) {
-      console.error("[KV] Lobi kaydetme hatası:", error)
+      console.error("[Redis] Lobi kaydetme hatası:", error)
       return false
     }
   } else {
@@ -58,14 +62,14 @@ async function setLobbyToKV(code: string, lobby: any) {
   }
 }
 
-// KV'den tüm lobi kodlarını al (kod kontrolü için)
+// Tüm lobi kodlarını al (kod kontrolü için)
 async function getAllLobbyCodes() {
-  if (useKV) {
+  if (redis) {
     try {
-      const keys = await kv.keys("lobby:*")
+      const keys = await redis.keys("lobby:*")
       return keys.map((key: string) => key.replace("lobby:", ""))
     } catch (error) {
-      console.error("[KV] Lobi kodları okuma hatası:", error)
+      console.error("[Redis] Lobi kodları okuma hatası:", error)
       return []
     }
   } else {
@@ -121,9 +125,9 @@ export async function POST(request: NextRequest) {
       }
 
       // Yeni lobi kaydet
-      await setLobbyToKV(lobbyCode, newLobby)
+      await setLobbyToStore(lobbyCode, newLobby)
       
-      console.log(`[API] Lobi oluşturuldu: ${lobbyCode}, Store: ${useKV ? 'KV' : 'Memory'}`)
+      console.log(`[API] Lobi oluşturuldu: ${lobbyCode}, Store: ${redis ? 'Upstash Redis' : 'Memory'}`)
       const allCodes = await getAllLobbyCodes()
       console.log(`[API] Toplam lobi sayısı: ${allCodes.length}`)
 
@@ -141,7 +145,7 @@ export async function POST(request: NextRequest) {
       const lobbyCode = code.toUpperCase().trim()
       console.log(`[API] Lobiye katılma isteği: ${lobbyCode}`)
       
-      const lobby = await getLobbyFromKV(lobbyCode)
+      const lobby = await getLobbyFromStore(lobbyCode)
 
       if (!lobby) {
         console.log(`[API] Lobi bulunamadı: ${lobbyCode}`)
@@ -164,7 +168,7 @@ export async function POST(request: NextRequest) {
       }
 
       const lobbyCode = code.toUpperCase().trim()
-      const lobby = await getLobbyFromKV(lobbyCode)
+      const lobby = await getLobbyFromStore(lobbyCode)
 
       if (!lobby) {
         return NextResponse.json(
@@ -185,7 +189,7 @@ export async function POST(request: NextRequest) {
       }
 
       const lobbyCode = code.toUpperCase().trim()
-      const lobby = await getLobbyFromKV(lobbyCode)
+      const lobby = await getLobbyFromStore(lobbyCode)
 
       if (!lobby) {
         return NextResponse.json(
@@ -201,7 +205,7 @@ export async function POST(request: NextRequest) {
         waitingList: lobbyData.waitingList || lobby.waitingList,
       }
 
-      await setLobbyToKV(lobbyCode, updatedLobby)
+      await setLobbyToStore(lobbyCode, updatedLobby)
 
       return NextResponse.json({ success: true })
     }
@@ -232,9 +236,9 @@ export async function GET(request: NextRequest) {
   }
 
   const lobbyCode = code.toUpperCase().trim()
-  console.log(`[API] GET isteği: ${lobbyCode}, Store: ${useKV ? 'KV' : 'Memory'}`)
+  console.log(`[API] GET isteği: ${lobbyCode}, Store: ${redis ? 'Upstash Redis' : 'Memory'}`)
   
-  const lobby = await getLobbyFromKV(lobbyCode)
+  const lobby = await getLobbyFromStore(lobbyCode)
 
   if (!lobby) {
     console.log(`[API] Lobi bulunamadı (GET): ${lobbyCode}`)
