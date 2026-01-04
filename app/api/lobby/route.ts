@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
+import { kv } from "@vercel/kv"
 
-// Global store - Vercel serverless function'larda paylaşımlı olması için
-// Not: Production'da Vercel KV veya database kullanılmalı
+// Vercel KV kullanarak paylaşımlı store
+// Fallback olarak global variable (development için)
 declare global {
   // eslint-disable-next-line no-var
   var lobbies: Map<string, {
@@ -12,23 +13,70 @@ declare global {
   }> | undefined
 }
 
-// Global variable kullan - serverless function'larda paylaşımlı olması için
-const lobbies = globalThis.lobbies || new Map<string, {
+const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
+
+// Fallback: Development için global variable
+const lobbies = !useKV && (globalThis.lobbies || new Map<string, {
   code: string
   teams: any[]
   waitingList: any[]
   createdAt: number
-}>()
+}>())
 
-// Development'ta hot reload'da kaybolmaması için
-if (process.env.NODE_ENV !== "production") {
-  globalThis.lobbies = lobbies
+if (!useKV && process.env.NODE_ENV !== "production") {
+  globalThis.lobbies = lobbies as any
+}
+
+// KV'den lobi al
+async function getLobbyFromKV(code: string) {
+  if (useKV) {
+    try {
+      const lobby = await kv.get(`lobby:${code}`)
+      return lobby as any
+    } catch (error) {
+      console.error("[KV] Lobi okuma hatası:", error)
+      return null
+    }
+  } else {
+    return (lobbies as Map<string, any>).get(code) || null
+  }
+}
+
+// KV'ye lobi kaydet
+async function setLobbyToKV(code: string, lobby: any) {
+  if (useKV) {
+    try {
+      await kv.set(`lobby:${code}`, lobby, { ex: 3600 }) // 1 saat TTL
+      return true
+    } catch (error) {
+      console.error("[KV] Lobi kaydetme hatası:", error)
+      return false
+    }
+  } else {
+    (lobbies as Map<string, any>).set(code, lobby)
+    return true
+  }
+}
+
+// KV'den tüm lobi kodlarını al (kod kontrolü için)
+async function getAllLobbyCodes() {
+  if (useKV) {
+    try {
+      const keys = await kv.keys("lobby:*")
+      return keys.map((key: string) => key.replace("lobby:", ""))
+    } catch (error) {
+      console.error("[KV] Lobi kodları okuma hatası:", error)
+      return []
+    }
+  } else {
+    return Array.from((lobbies as Map<string, any>).keys())
+  }
 }
 
 // Lobi oluştur
 export async function POST(request: NextRequest) {
   try {
-    const { action, code } = await request.json()
+    const { action, code, lobbyData } = await request.json()
 
     if (action === "create") {
       // Random 6 karakterlik kod oluştur
@@ -44,7 +92,8 @@ export async function POST(request: NextRequest) {
       let lobbyCode = generateCode()
       // Eğer kod zaten varsa yeni kod oluştur
       let attempts = 0
-      while (lobbies.has(lobbyCode) && attempts < 10) {
+      const existingCodes = await getAllLobbyCodes()
+      while (existingCodes.includes(lobbyCode) && attempts < 10) {
         lobbyCode = generateCode()
         attempts++
       }
@@ -71,11 +120,12 @@ export async function POST(request: NextRequest) {
         createdAt: Date.now(),
       }
 
-      // Yeni lobi oluştur
-      lobbies.set(lobbyCode, newLobby)
+      // Yeni lobi kaydet
+      await setLobbyToKV(lobbyCode, newLobby)
       
-      console.log(`[API] Lobi oluşturuldu: ${lobbyCode}, Toplam lobi sayısı: ${lobbies.size}`)
-      console.log(`[API] Mevcut lobiler:`, Array.from(lobbies.keys()))
+      console.log(`[API] Lobi oluşturuldu: ${lobbyCode}, Store: ${useKV ? 'KV' : 'Memory'}`)
+      const allCodes = await getAllLobbyCodes()
+      console.log(`[API] Toplam lobi sayısı: ${allCodes.length}`)
 
       return NextResponse.json({ code: lobbyCode, success: true })
     }
@@ -90,9 +140,8 @@ export async function POST(request: NextRequest) {
 
       const lobbyCode = code.toUpperCase().trim()
       console.log(`[API] Lobiye katılma isteği: ${lobbyCode}`)
-      console.log(`[API] Mevcut lobiler:`, Array.from(lobbies.keys()))
       
-      const lobby = lobbies.get(lobbyCode)
+      const lobby = await getLobbyFromKV(lobbyCode)
 
       if (!lobby) {
         console.log(`[API] Lobi bulunamadı: ${lobbyCode}`)
@@ -115,7 +164,7 @@ export async function POST(request: NextRequest) {
       }
 
       const lobbyCode = code.toUpperCase().trim()
-      const lobby = lobbies.get(lobbyCode)
+      const lobby = await getLobbyFromKV(lobbyCode)
 
       if (!lobby) {
         return NextResponse.json(
@@ -128,7 +177,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "update") {
-      const { lobbyData } = await request.json()
       if (!code) {
         return NextResponse.json(
           { error: "Lobi kodu gerekli" },
@@ -137,7 +185,7 @@ export async function POST(request: NextRequest) {
       }
 
       const lobbyCode = code.toUpperCase().trim()
-      const lobby = lobbies.get(lobbyCode)
+      const lobby = await getLobbyFromKV(lobbyCode)
 
       if (!lobby) {
         return NextResponse.json(
@@ -147,11 +195,13 @@ export async function POST(request: NextRequest) {
       }
 
       // Lobi verilerini güncelle
-      lobbies.set(lobbyCode, {
+      const updatedLobby = {
         ...lobby,
         teams: lobbyData.teams || lobby.teams,
         waitingList: lobbyData.waitingList || lobby.waitingList,
-      })
+      }
+
+      await setLobbyToKV(lobbyCode, updatedLobby)
 
       return NextResponse.json({ success: true })
     }
@@ -182,10 +232,9 @@ export async function GET(request: NextRequest) {
   }
 
   const lobbyCode = code.toUpperCase().trim()
-  console.log(`[API] GET isteği: ${lobbyCode}`)
-  console.log(`[API] Mevcut lobiler:`, Array.from(lobbies.keys()))
+  console.log(`[API] GET isteği: ${lobbyCode}, Store: ${useKV ? 'KV' : 'Memory'}`)
   
-  const lobby = lobbies.get(lobbyCode)
+  const lobby = await getLobbyFromKV(lobbyCode)
 
   if (!lobby) {
     console.log(`[API] Lobi bulunamadı (GET): ${lobbyCode}`)
@@ -198,4 +247,3 @@ export async function GET(request: NextRequest) {
   console.log(`[API] Lobi bulundu (GET): ${lobbyCode}`)
   return NextResponse.json({ lobby, success: true })
 }
-
