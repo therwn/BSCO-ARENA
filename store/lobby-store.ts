@@ -9,8 +9,8 @@ export interface Player {
 export interface Team {
   id: string
   name: string
-  captains: Player[]
-  players: Player[]
+  captains: (Player | null)[]
+  players: (Player | null)[]
 }
 
 interface LobbyState {
@@ -31,14 +31,14 @@ export const useLobbyStore = create<LobbyState>((set) => ({
     {
       id: "team1",
       name: "Takım 1",
-      captains: [null, null] as any,
-      players: [null, null, null, null] as any,
+      captains: [null, null],
+      players: [null, null, null, null],
     },
     {
       id: "team2",
       name: "Takım 2",
-      captains: [null, null] as any,
-      players: [null, null, null, null] as any,
+      captains: [null, null],
+      players: [null, null, null, null],
     },
   ],
   waitingList: [],
@@ -129,14 +129,14 @@ export const useLobbyStore = create<LobbyState>((set) => ({
         {
           id: "team1",
           name: "Takım 1",
-          captains: [null, null] as any,
-          players: [null, null, null, null] as any,
+          captains: [null, null],
+          players: [null, null, null, null],
         },
         {
           id: "team2",
           name: "Takım 2",
-          captains: [null, null] as any,
-          players: [null, null, null, null] as any,
+          captains: [null, null],
+          players: [null, null, null, null],
         },
       ],
       waitingList: [],

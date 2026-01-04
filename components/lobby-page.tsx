@@ -37,6 +37,7 @@ export default function LobbyPage({ lobbyCode }: LobbyPageProps) {
       name: `Oyuncu ${playerId.slice(-4)}`,
       isCaptain: false,
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleJoinWaitingList = () => {
