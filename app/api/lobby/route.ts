@@ -1,12 +1,29 @@
 import { NextRequest, NextResponse } from "next/server"
 
-// In-memory store (production'da database kullanılmalı)
-const lobbies = new Map<string, {
+// Global store - Vercel serverless function'larda paylaşımlı olması için
+// Not: Production'da Vercel KV veya database kullanılmalı
+declare global {
+  // eslint-disable-next-line no-var
+  var lobbies: Map<string, {
+    code: string
+    teams: any[]
+    waitingList: any[]
+    createdAt: number
+  }> | undefined
+}
+
+// Global variable kullan - serverless function'larda paylaşımlı olması için
+const lobbies = globalThis.lobbies || new Map<string, {
   code: string
   teams: any[]
   waitingList: any[]
   createdAt: number
 }>()
+
+// Development'ta hot reload'da kaybolmaması için
+if (process.env.NODE_ENV !== "production") {
+  globalThis.lobbies = lobbies
+}
 
 // Lobi oluştur
 export async function POST(request: NextRequest) {
@@ -26,12 +43,13 @@ export async function POST(request: NextRequest) {
 
       let lobbyCode = generateCode()
       // Eğer kod zaten varsa yeni kod oluştur
-      while (lobbies.has(lobbyCode)) {
+      let attempts = 0
+      while (lobbies.has(lobbyCode) && attempts < 10) {
         lobbyCode = generateCode()
+        attempts++
       }
 
-      // Yeni lobi oluştur
-      lobbies.set(lobbyCode, {
+      const newLobby = {
         code: lobbyCode,
         teams: [
           {
@@ -51,7 +69,13 @@ export async function POST(request: NextRequest) {
         ],
         waitingList: [],
         createdAt: Date.now(),
-      })
+      }
+
+      // Yeni lobi oluştur
+      lobbies.set(lobbyCode, newLobby)
+      
+      console.log(`[API] Lobi oluşturuldu: ${lobbyCode}, Toplam lobi sayısı: ${lobbies.size}`)
+      console.log(`[API] Mevcut lobiler:`, Array.from(lobbies.keys()))
 
       return NextResponse.json({ code: lobbyCode, success: true })
     }
@@ -65,15 +89,20 @@ export async function POST(request: NextRequest) {
       }
 
       const lobbyCode = code.toUpperCase().trim()
+      console.log(`[API] Lobiye katılma isteği: ${lobbyCode}`)
+      console.log(`[API] Mevcut lobiler:`, Array.from(lobbies.keys()))
+      
       const lobby = lobbies.get(lobbyCode)
 
       if (!lobby) {
+        console.log(`[API] Lobi bulunamadı: ${lobbyCode}`)
         return NextResponse.json(
           { error: "Lobi bulunamadı" },
           { status: 404 }
         )
       }
 
+      console.log(`[API] Lobi bulundu: ${lobbyCode}`)
       return NextResponse.json({ code: lobbyCode, success: true, lobby })
     }
 
@@ -153,15 +182,20 @@ export async function GET(request: NextRequest) {
   }
 
   const lobbyCode = code.toUpperCase().trim()
+  console.log(`[API] GET isteği: ${lobbyCode}`)
+  console.log(`[API] Mevcut lobiler:`, Array.from(lobbies.keys()))
+  
   const lobby = lobbies.get(lobbyCode)
 
   if (!lobby) {
+    console.log(`[API] Lobi bulunamadı (GET): ${lobbyCode}`)
     return NextResponse.json(
       { error: "Lobi bulunamadı" },
       { status: 404 }
     )
   }
 
+  console.log(`[API] Lobi bulundu (GET): ${lobbyCode}`)
   return NextResponse.json({ lobby, success: true })
 }
 
