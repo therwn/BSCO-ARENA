@@ -1,26 +1,28 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-// Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+// Supabase client oluşturma fonksiyonu (her request'te yeniden oluştur)
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-const supabase = supabaseUrl && supabaseKey
-  ? createClient(supabaseUrl, supabaseKey)
-  : null
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn("[Supabase] Client oluşturulamadı - Memory store kullanılacak", {
+      hasUrl: !!supabaseUrl,
+      hasKey: !!supabaseKey,
+      url: supabaseUrl,
+      keyPreview: supabaseKey ? supabaseKey.substring(0, 20) + "..." : null,
+    })
+    return null
+  }
 
-// Debug: Supabase bağlantı durumunu logla
-if (supabase) {
+  const client = createClient(supabaseUrl, supabaseKey)
   console.log("[Supabase] Client oluşturuldu:", {
-    url: supabaseUrl?.substring(0, 30) + "...",
+    url: supabaseUrl.substring(0, 30) + "...",
     hasKey: !!supabaseKey,
     keyType: process.env.SUPABASE_SERVICE_ROLE_KEY ? "SERVICE_ROLE" : "ANON",
   })
-} else {
-  console.warn("[Supabase] Client oluşturulamadı - Memory store kullanılacak", {
-    hasUrl: !!supabaseUrl,
-    hasKey: !!supabaseKey,
-  })
+  return client
 }
 
 // Fallback: Development için global variable
@@ -47,6 +49,7 @@ if (!supabase && process.env.NODE_ENV !== "production") {
 
 // Supabase'den lobi al
 async function getLobbyFromStore(code: string) {
+  const supabase = getSupabaseClient()
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -87,6 +90,7 @@ async function getLobbyFromStore(code: string) {
 
 // Supabase'e lobi kaydet
 async function setLobbyToStore(code: string, lobby: any) {
+  const supabase = getSupabaseClient()
   if (supabase) {
     try {
       const payload = {
@@ -138,6 +142,7 @@ async function setLobbyToStore(code: string, lobby: any) {
 
 // Tüm lobi kodlarını al (kod kontrolü için)
 async function getAllLobbyCodes() {
+  const supabase = getSupabaseClient()
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -217,6 +222,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      const supabase = getSupabaseClient()
       console.log(`[API] Lobi oluşturuldu: ${lobbyCode}, Store: ${supabase ? 'Supabase' : 'Memory'}`)
       const allCodes = await getAllLobbyCodes()
       console.log(`[API] Toplam lobi sayısı: ${allCodes.length}`)
@@ -336,6 +342,7 @@ export async function GET(request: NextRequest) {
   }
 
   const lobbyCode = code.toUpperCase().trim()
+  const supabase = getSupabaseClient()
   console.log(`[API] GET isteği: ${lobbyCode}, Store: ${supabase ? 'Supabase' : 'Memory'}`)
   
   const lobby = await getLobbyFromStore(lobbyCode)
