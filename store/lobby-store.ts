@@ -9,6 +9,7 @@ export interface Player {
 export interface Team {
   id: string
   name: string
+  color: string
   captains: (Player | null)[]
   players: (Player | null)[]
 }
@@ -23,6 +24,7 @@ interface LobbyState {
   joinTeamSlot: (teamId: string, slotType: "captain" | "player", slotIndex: number) => void
   leaveTeamSlot: (teamId: string, slotType: "captain" | "player", slotIndex: number) => void
   updateTeamName: (teamId: string, name: string) => void
+  updateTeamColor: (teamId: string, color: string) => void
   initializeTeams: () => void
 }
 
@@ -31,13 +33,15 @@ export const useLobbyStore = create<LobbyState>((set) => ({
     {
       id: "team1",
       name: "Takım 1",
-      captains: [null, null],
+      color: "#3b82f6",
+      captains: [null],
       players: [null, null, null, null],
     },
     {
       id: "team2",
       name: "Takım 2",
-      captains: [null, null],
+      color: "#ef4444",
+      captains: [null],
       players: [null, null, null, null],
     },
   ],
@@ -123,19 +127,28 @@ export const useLobbyStore = create<LobbyState>((set) => ({
       ),
     })),
 
+  updateTeamColor: (teamId, color) =>
+    set((state) => ({
+      teams: state.teams.map((t) =>
+        t.id === teamId ? { ...t, color } : t
+      ),
+    })),
+
   initializeTeams: () =>
     set({
       teams: [
         {
           id: "team1",
           name: "Takım 1",
-          captains: [null, null],
+          color: "#3b82f6",
+          captains: [null],
           players: [null, null, null, null],
         },
         {
           id: "team2",
           name: "Takım 2",
-          captains: [null, null],
+          color: "#ef4444",
+          captains: [null],
           players: [null, null, null, null],
         },
       ],

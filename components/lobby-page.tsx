@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { useLobbyStore } from "@/store/lobby-store"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import TeamCard from "@/components/team-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -26,7 +25,6 @@ export default function LobbyPage({ lobbyCode }: LobbyPageProps) {
   } = useLobbyStore()
 
   const [playerName, setPlayerName] = useState("")
-  const [activeTab, setActiveTab] = useState("team1")
 
   useEffect(() => {
     initializeTeams()
@@ -148,34 +146,16 @@ export default function LobbyPage({ lobbyCode }: LobbyPageProps) {
           </motion.div>
         )}
 
-        {/* Teams Tabs */}
+        {/* Teams Side by Side */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.4 }}
         >
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="bg-[#0a0a0a] border border-[#1a1a1a] mb-6">
-              <TabsTrigger
-                value="team1"
-                className="data-[active=true]:bg-[#1a1a1a] data-[active=true]:text-white"
-              >
-                {teams[0]?.name || "Takım 1"}
-              </TabsTrigger>
-              <TabsTrigger
-                value="team2"
-                className="data-[active=true]:bg-[#1a1a1a] data-[active=true]:text-white"
-              >
-                {teams[1]?.name || "Takım 2"}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="team1">
-              {teams[0] && <TeamCard team={teams[0]} />}
-            </TabsContent>
-            <TabsContent value="team2">
-              {teams[1] && <TeamCard team={teams[1]} />}
-            </TabsContent>
-          </Tabs>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {teams[0] && <TeamCard team={teams[0]} />}
+            {teams[1] && <TeamCard team={teams[1]} />}
+          </div>
         </motion.div>
       </div>
     </div>
