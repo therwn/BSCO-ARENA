@@ -9,6 +9,20 @@ const supabase = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey)
   : null
 
+// Debug: Supabase bağlantı durumunu logla
+if (supabase) {
+  console.log("[Supabase] Client oluşturuldu:", {
+    url: supabaseUrl?.substring(0, 30) + "...",
+    hasKey: !!supabaseKey,
+    keyType: process.env.SUPABASE_SERVICE_ROLE_KEY ? "SERVICE_ROLE" : "ANON",
+  })
+} else {
+  console.warn("[Supabase] Client oluşturulamadı - Memory store kullanılacak", {
+    hasUrl: !!supabaseUrl,
+    hasKey: !!supabaseKey,
+  })
+}
+
 // Fallback: Development için global variable
 declare global {
   // eslint-disable-next-line no-var
@@ -41,8 +55,18 @@ async function getLobbyFromStore(code: string) {
         .eq("code", code)
         .single()
 
-      if (error || !data) {
-        console.error("[Supabase] Lobi okuma hatası:", error)
+      if (error) {
+        console.error("[Supabase] Lobi okuma hatası:", {
+          code,
+          error: error.message,
+          details: error.details,
+          hint: error.hint,
+        })
+        return null
+      }
+
+      if (!data) {
+        console.log("[Supabase] Lobi bulunamadı:", code)
         return null
       }
 
@@ -53,7 +77,7 @@ async function getLobbyFromStore(code: string) {
         createdAt: data.created_at ? new Date(data.created_at).getTime() : Date.now(),
       }
     } catch (error) {
-      console.error("[Supabase] Lobi okuma hatası:", error)
+      console.error("[Supabase] Lobi okuma exception:", error)
       return null
     }
   } else {
@@ -65,29 +89,49 @@ async function getLobbyFromStore(code: string) {
 async function setLobbyToStore(code: string, lobby: any) {
   if (supabase) {
     try {
-      const { error } = await supabase
+      const payload = {
+        code: lobby.code,
+        teams: lobby.teams,
+        waiting_list: lobby.waitingList || [],
+        created_at: lobby.createdAt || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      console.log("[Supabase] Lobi kaydediliyor:", {
+        code: lobby.code,
+        payload: JSON.stringify(payload).substring(0, 100) + "...",
+      })
+
+      const { data, error } = await supabase
         .from("lobbies")
-        .upsert({
-          code: lobby.code,
-          teams: lobby.teams,
-          waiting_list: lobby.waitingList || [],
-          created_at: lobby.createdAt || new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, {
+        .upsert(payload, {
           onConflict: "code",
         })
 
       if (error) {
-        console.error("[Supabase] Lobi kaydetme hatası:", error)
+        console.error("[Supabase] Lobi kaydetme hatası:", {
+          code: lobby.code,
+          error: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        })
         return false
       }
+
+      console.log("[Supabase] Lobi başarıyla kaydedildi:", lobby.code)
       return true
-    } catch (error) {
-      console.error("[Supabase] Lobi kaydetme hatası:", error)
+    } catch (error: any) {
+      console.error("[Supabase] Lobi kaydetme exception:", {
+        code: lobby.code,
+        error: error.message,
+        stack: error.stack,
+      })
       return false
     }
   } else {
-    (lobbies as Map<string, any>).set(code, lobby)
+    console.log("[Memory] Lobi kaydediliyor:", code)
+    ;(lobbies as Map<string, any>).set(code, lobby)
     return true
   }
 }
@@ -105,9 +149,9 @@ async function getAllLobbyCodes() {
         return []
       }
 
-      return data.map((item: any) => item.code)
+      return data?.map((item: any) => item.code) || []
     } catch (error) {
-      console.error("[Supabase] Lobi kodları okuma hatası:", error)
+      console.error("[Supabase] Lobi kodları okuma exception:", error)
       return []
     }
   } else {
@@ -163,8 +207,16 @@ export async function POST(request: NextRequest) {
       }
 
       // Yeni lobi kaydet
-      await setLobbyToStore(lobbyCode, newLobby)
+      const saved = await setLobbyToStore(lobbyCode, newLobby)
       
+      if (!saved) {
+        console.error("[API] Lobi kaydedilemedi:", lobbyCode)
+        return NextResponse.json(
+          { error: "Lobi kaydedilemedi. Lütfen tekrar deneyin." },
+          { status: 500 }
+        )
+      }
+
       console.log(`[API] Lobi oluşturuldu: ${lobbyCode}, Store: ${supabase ? 'Supabase' : 'Memory'}`)
       const allCodes = await getAllLobbyCodes()
       console.log(`[API] Toplam lobi sayısı: ${allCodes.length}`)
@@ -243,7 +295,14 @@ export async function POST(request: NextRequest) {
         waitingList: lobbyData.waitingList || lobby.waitingList,
       }
 
-      await setLobbyToStore(lobbyCode, updatedLobby)
+      const saved = await setLobbyToStore(lobbyCode, updatedLobby)
+      
+      if (!saved) {
+        return NextResponse.json(
+          { error: "Lobi güncellenemedi" },
+          { status: 500 }
+        )
+      }
 
       return NextResponse.json({ success: true })
     }
@@ -252,8 +311,11 @@ export async function POST(request: NextRequest) {
       { error: "Geçersiz işlem" },
       { status: 400 }
     )
-  } catch (error) {
-    console.error("Lobi API hatası:", error)
+  } catch (error: any) {
+    console.error("Lobi API hatası:", {
+      message: error.message,
+      stack: error.stack,
+    })
     return NextResponse.json(
       { error: "Sunucu hatası" },
       { status: 500 }
