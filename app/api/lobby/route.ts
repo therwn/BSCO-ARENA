@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { Redis } from "@upstash/redis"
+import { createClient } from "@supabase/supabase-js"
 
-// Upstash Redis client (environment variable'lar varsa)
-const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-  ? new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    })
+// Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+const supabase = supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey)
   : null
 
 // Fallback: Development için global variable
@@ -20,25 +20,40 @@ declare global {
   }> | undefined
 }
 
-const lobbies = !redis && (globalThis.lobbies || new Map<string, {
+const lobbies = !supabase && (globalThis.lobbies || new Map<string, {
   code: string
   teams: any[]
   waitingList: any[]
   createdAt: number
 }>())
 
-if (!redis && process.env.NODE_ENV !== "production") {
+if (!supabase && process.env.NODE_ENV !== "production") {
   globalThis.lobbies = lobbies as any
 }
 
-// Redis'ten lobi al
+// Supabase'den lobi al
 async function getLobbyFromStore(code: string) {
-  if (redis) {
+  if (supabase) {
     try {
-      const lobby = await redis.get(`lobby:${code}`)
-      return lobby as any
+      const { data, error } = await supabase
+        .from("lobbies")
+        .select("*")
+        .eq("code", code)
+        .single()
+
+      if (error || !data) {
+        console.error("[Supabase] Lobi okuma hatası:", error)
+        return null
+      }
+
+      return {
+        code: data.code,
+        teams: data.teams,
+        waitingList: data.waiting_list || [],
+        createdAt: data.created_at,
+      }
     } catch (error) {
-      console.error("[Redis] Lobi okuma hatası:", error)
+      console.error("[Supabase] Lobi okuma hatası:", error)
       return null
     }
   } else {
@@ -46,14 +61,29 @@ async function getLobbyFromStore(code: string) {
   }
 }
 
-// Redis'e lobi kaydet
+// Supabase'e lobi kaydet
 async function setLobbyToStore(code: string, lobby: any) {
-  if (redis) {
+  if (supabase) {
     try {
-      await redis.set(`lobby:${code}`, lobby, { ex: 3600 }) // 1 saat TTL
+      const { error } = await supabase
+        .from("lobbies")
+        .upsert({
+          code: lobby.code,
+          teams: lobby.teams,
+          waiting_list: lobby.waitingList || [],
+          created_at: lobby.createdAt || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: "code",
+        })
+
+      if (error) {
+        console.error("[Supabase] Lobi kaydetme hatası:", error)
+        return false
+      }
       return true
     } catch (error) {
-      console.error("[Redis] Lobi kaydetme hatası:", error)
+      console.error("[Supabase] Lobi kaydetme hatası:", error)
       return false
     }
   } else {
@@ -64,12 +94,20 @@ async function setLobbyToStore(code: string, lobby: any) {
 
 // Tüm lobi kodlarını al (kod kontrolü için)
 async function getAllLobbyCodes() {
-  if (redis) {
+  if (supabase) {
     try {
-      const keys = await redis.keys("lobby:*")
-      return keys.map((key: string) => key.replace("lobby:", ""))
+      const { data, error } = await supabase
+        .from("lobbies")
+        .select("code")
+
+      if (error) {
+        console.error("[Supabase] Lobi kodları okuma hatası:", error)
+        return []
+      }
+
+      return data.map((item: any) => item.code)
     } catch (error) {
-      console.error("[Redis] Lobi kodları okuma hatası:", error)
+      console.error("[Supabase] Lobi kodları okuma hatası:", error)
       return []
     }
   } else {
@@ -127,7 +165,7 @@ export async function POST(request: NextRequest) {
       // Yeni lobi kaydet
       await setLobbyToStore(lobbyCode, newLobby)
       
-      console.log(`[API] Lobi oluşturuldu: ${lobbyCode}, Store: ${redis ? 'Upstash Redis' : 'Memory'}`)
+      console.log(`[API] Lobi oluşturuldu: ${lobbyCode}, Store: ${supabase ? 'Supabase' : 'Memory'}`)
       const allCodes = await getAllLobbyCodes()
       console.log(`[API] Toplam lobi sayısı: ${allCodes.length}`)
 
@@ -236,7 +274,7 @@ export async function GET(request: NextRequest) {
   }
 
   const lobbyCode = code.toUpperCase().trim()
-  console.log(`[API] GET isteği: ${lobbyCode}, Store: ${redis ? 'Upstash Redis' : 'Memory'}`)
+  console.log(`[API] GET isteği: ${lobbyCode}, Store: ${supabase ? 'Supabase' : 'Memory'}`)
   
   const lobby = await getLobbyFromStore(lobbyCode)
 
