@@ -29,6 +29,8 @@ interface LobbyState {
   updateTeamName: (teamId: string, name: string) => void
   updateTeamColor: (teamId: string, color: string) => void
   initializeTeams: () => void
+  onTeamSlotChange?: () => void
+  setOnTeamSlotChange: (callback: (() => void) | undefined) => void
 }
 
 export const useLobbyStore = create<LobbyState>((set) => ({
@@ -50,8 +52,11 @@ export const useLobbyStore = create<LobbyState>((set) => ({
   ],
   waitingList: [],
   currentPlayer: null,
+  onTeamSlotChange: undefined,
 
   setCurrentPlayer: (player) => set({ currentPlayer: player }),
+
+  setOnTeamSlotChange: (callback) => set({ onTeamSlotChange: callback }),
 
   setTeams: (teams) => set({ teams }),
 
@@ -104,10 +109,17 @@ export const useLobbyStore = create<LobbyState>((set) => ({
         }
       })
 
-      return {
+      const newState = {
         teams: newTeams,
         waitingList: state.waitingList.filter((p) => p.id !== currentPlayer.id),
       }
+
+      // Hemen API'ye gönder (callback varsa)
+      if (state.onTeamSlotChange) {
+        setTimeout(() => state.onTeamSlotChange?.(), 0)
+      }
+
+      return newState
     }),
 
   leaveTeamSlot: (teamId, slotType, slotIndex) =>
@@ -130,7 +142,14 @@ export const useLobbyStore = create<LobbyState>((set) => ({
         return t
       })
 
-      return { teams: newTeams }
+      const newState = { teams: newTeams }
+
+      // Hemen API'ye gönder (callback varsa)
+      if (state.onTeamSlotChange) {
+        setTimeout(() => state.onTeamSlotChange?.(), 0)
+      }
+
+      return newState
     }),
 
   removePlayerFromAllSlots: (playerId) =>

@@ -29,6 +29,7 @@ export default function LobbyPage() {
     initializeTeams,
     setTeams,
     setWaitingList,
+    setOnTeamSlotChange,
   } = useLobbyStore()
 
   // Lobi verilerini yükle ve senkronize et
@@ -70,6 +71,44 @@ export default function LobbyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lobbyCode])
 
+  // Team slot değişikliklerinde hemen API'ye gönder
+  useEffect(() => {
+    if (isLoading) return
+
+    const handleTeamSlotChange = async () => {
+      if (isSyncing) return
+      setIsSyncing(true)
+
+      try {
+        await fetch("/api/lobby", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "update",
+            code: lobbyCode,
+            lobbyData: {
+              teams,
+              waitingList,
+            },
+          }),
+        })
+      } catch (error) {
+        console.error("Team slot senkronizasyon hatası:", error)
+      } finally {
+        setIsSyncing(false)
+      }
+    }
+
+    setOnTeamSlotChange(() => handleTeamSlotChange)
+
+    return () => {
+      setOnTeamSlotChange(undefined)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lobbyCode, teams, waitingList, isLoading])
+
   // Periyodik olarak lobi verilerini senkronize et
   useEffect(() => {
     if (!lobbyCode) return
@@ -97,8 +136,8 @@ export default function LobbyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lobbyCode])
 
-  // Store değişikliklerini API'ye gönder (debounce ile)
-  const syncToServer = async () => {
+  // Store değişikliklerini API'ye gönder
+  const syncToServer = async (immediate = false) => {
     if (!lobbyCode || isSyncing || isLoading) return
 
     try {
@@ -125,14 +164,14 @@ export default function LobbyPage() {
     }
   }
 
-  // Store değiştiğinde sunucuya gönder (debounce ile)
+  // Store değiştiğinde sunucuya gönder (debounce ile, ama join/leave işlemleri için immediate)
   useEffect(() => {
     if (isLoading) return
 
-    // Debounce: 500ms bekle, sonra gönder
+    // Debounce: 300ms bekle, sonra gönder (daha hızlı)
     const timeoutId = setTimeout(() => {
       syncToServer()
-    }, 500)
+    }, 300)
 
     return () => clearTimeout(timeoutId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
