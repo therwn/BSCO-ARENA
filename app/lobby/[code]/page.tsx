@@ -96,12 +96,12 @@ export default function LobbyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lobbyCode])
 
-  // Store değişikliklerini API'ye gönder
+  // Store değişikliklerini API'ye gönder (debounce ile)
   const syncToServer = async () => {
-    if (!lobbyCode || isSyncing) return
+    if (!lobbyCode || isSyncing || isLoading) return
 
     try {
-      await fetch("/api/lobby", {
+      const response = await fetch("/api/lobby", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -115,16 +115,25 @@ export default function LobbyPage() {
           },
         }),
       })
+
+      if (!response.ok) {
+        console.error("Senkronizasyon hatası:", await response.text())
+      }
     } catch (error) {
       console.error("Senkronizasyon hatası:", error)
     }
   }
 
-  // Store değiştiğinde sunucuya gönder
+  // Store değiştiğinde sunucuya gönder (debounce ile)
   useEffect(() => {
-    if (!isLoading) {
+    if (isLoading) return
+
+    // Debounce: 500ms bekle, sonra gönder
+    const timeoutId = setTimeout(() => {
       syncToServer()
-    }
+    }, 500)
+
+    return () => clearTimeout(timeoutId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teams, waitingList])
 

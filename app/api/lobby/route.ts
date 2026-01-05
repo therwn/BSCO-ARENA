@@ -107,11 +107,28 @@ async function setLobbyToStore(code: string, lobby: any) {
   const supabase = getSupabaseClient()
   if (supabase) {
     try {
+      // createdAt'i ISO string formatına çevir
+      let createdAt: string
+      if (lobby.createdAt) {
+        if (typeof lobby.createdAt === 'number') {
+          // Timestamp ise ISO string'e çevir
+          createdAt = new Date(lobby.createdAt).toISOString()
+        } else if (typeof lobby.createdAt === 'string') {
+          // Zaten string ise kullan
+          createdAt = lobby.createdAt
+        } else {
+          // Geçersiz format ise şimdiki zamanı kullan
+          createdAt = new Date().toISOString()
+        }
+      } else {
+        createdAt = new Date().toISOString()
+      }
+
       const payload = {
         code: lobby.code,
         teams: lobby.teams,
         waiting_list: lobby.waitingList || [],
-        created_at: lobby.createdAt || new Date().toISOString(),
+        created_at: createdAt,
         updated_at: new Date().toISOString(),
       }
 
