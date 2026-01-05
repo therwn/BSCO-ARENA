@@ -109,9 +109,9 @@ export default function LobbyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lobbyCode, teams, waitingList, isLoading])
 
-  // Periyodik olarak lobi verilerini senkronize et
+  // Periyodik olarak lobi verilerini senkronize et (sadece diğer kullanıcıların değişikliklerini al)
   useEffect(() => {
-    if (!lobbyCode) return
+    if (!lobbyCode || !currentPlayer) return
 
     const syncInterval = setInterval(async () => {
       if (isSyncing) return
@@ -122,19 +122,59 @@ export default function LobbyPage() {
         const data = await response.json()
 
         if (data.success && data.lobby) {
-          setTeams(data.lobby.teams)
-          setWaitingList(data.lobby.waitingList)
+          // Sadece diğer kullanıcıların değişikliklerini al
+          // Current player'ın verilerini koru (local state'i override etme)
+          const serverWaitingList = data.lobby.waitingList || []
+          const serverTeams = data.lobby.teams || []
+
+          // Bekleme listesini merge et - current player varsa koru
+          const mergedWaitingList = [
+            ...serverWaitingList.filter((p: any) => p.id !== currentPlayer.id),
+            ...waitingList.filter((p) => p.id === currentPlayer.id),
+          ]
+
+          // Teams'i merge et - current player'ın slotlarını koru
+          const mergedTeams = serverTeams.map((serverTeam: any) => {
+            const localTeam = teams.find((t) => t.id === serverTeam.id)
+            if (!localTeam) return serverTeam
+
+            // Current player'ın olduğu slotları koru
+            const mergedCaptains = serverTeam.captains.map((captain: any, index: number) => {
+              const localCaptain = localTeam.captains[index]
+              if (localCaptain?.id === currentPlayer.id) {
+                return localCaptain
+              }
+              return captain
+            })
+
+            const mergedPlayers = serverTeam.players.map((player: any, index: number) => {
+              const localPlayer = localTeam.players[index]
+              if (localPlayer?.id === currentPlayer.id) {
+                return localPlayer
+              }
+              return player
+            })
+
+            return {
+              ...serverTeam,
+              captains: mergedCaptains,
+              players: mergedPlayers,
+            }
+          })
+
+          setTeams(mergedTeams)
+          setWaitingList(mergedWaitingList)
         }
       } catch (error) {
         console.error("Senkronizasyon hatası:", error)
       } finally {
         setIsSyncing(false)
       }
-    }, 2000) // Her 2 saniyede bir senkronize et
+    }, 3000) // Her 3 saniyede bir senkronize et (biraz daha yavaş)
 
     return () => clearInterval(syncInterval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lobbyCode])
+  }, [lobbyCode, currentPlayer])
 
   // Store değişikliklerini API'ye gönder
   const syncToServer = async (immediate = false) => {
@@ -223,6 +263,37 @@ export default function LobbyPage() {
       }
       setCurrentPlayer(updatedPlayer)
       addToWaitingList(updatedPlayer)
+
+      // Hemen API'ye gönder ve başarılı olana kadar bekle
+      try {
+        setIsSyncing(true)
+        const response = await fetch("/api/lobby", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "update",
+            code: lobbyCode,
+            lobbyData: {
+              teams,
+              waitingList: [...waitingList, updatedPlayer],
+            },
+          }),
+        })
+
+        if (!response.ok) {
+          console.error("Bekleme listesi güncelleme hatası:", await response.text())
+          // Hata durumunda geri al
+          removeFromWaitingList(updatedPlayer.id)
+        }
+      } catch (error) {
+        console.error("Bekleme listesi güncelleme hatası:", error)
+        // Hata durumunda geri al
+        removeFromWaitingList(updatedPlayer.id)
+      } finally {
+        setIsSyncing(false)
+      }
     }
   }
 
