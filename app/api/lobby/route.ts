@@ -3,8 +3,14 @@ import { createClient } from "@supabase/supabase-js"
 
 // Supabase client oluşturma fonksiyonu (her request'te yeniden oluştur)
 function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  // Supabase entegrasyonu farklı isimlerle variable'lar ekleyebilir
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL 
+    || process.env.SUPABASE_URL
+    || process.env.NEXT_PUBLIC_ARENASUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY 
+    || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    || process.env.SUPABASE_ANON_KEY
+    || process.env.NEXT_PUBLIC_ARENASUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseKey) {
     console.warn("[Supabase] Client oluşturulamadı - Memory store kullanılacak", {
