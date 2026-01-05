@@ -25,6 +25,7 @@ export default function LobbyPage() {
     setCurrentPlayer,
     addToWaitingList,
     removeFromWaitingList,
+    removePlayerFromAllSlots,
     initializeTeams,
     setTeams,
     setWaitingList,
@@ -137,6 +138,44 @@ export default function LobbyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teams, waitingList])
 
+  // Browser kapatıldığında veya sayfa değiştirildiğinde oyuncuyu çıkar
+  useEffect(() => {
+    if (!currentPlayer || !lobbyCode) return
+
+    const handleBeforeUnload = async () => {
+      // Synchronous olarak çalışması gerekiyor, bu yüzden navigator.sendBeacon kullanıyoruz
+      const payload = JSON.stringify({
+        action: "update",
+        code: lobbyCode,
+        lobbyData: {
+          teams: teams.map((team) => ({
+            ...team,
+            captains: team.captains.map((captain) =>
+              captain?.id === currentPlayer.id ? null : captain
+            ),
+            players: team.players.map((player) =>
+              player?.id === currentPlayer.id ? null : player
+            ),
+          })),
+          waitingList: waitingList.filter((p) => p.id !== currentPlayer.id),
+        },
+      })
+
+      // sendBeacon ile güvenilir bir şekilde gönder
+      navigator.sendBeacon(
+        "/api/lobby",
+        new Blob([payload], { type: "application/json" })
+      )
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPlayer, lobbyCode, teams, waitingList])
+
   const handleJoinWaitingList = async () => {
     if (playerName.trim() && currentPlayer) {
       const updatedPlayer = {
@@ -148,9 +187,39 @@ export default function LobbyPage() {
     }
   }
 
-  const handleLeaveLobby = () => {
+  const handleLeaveLobby = async () => {
     if (currentPlayer) {
-      removeFromWaitingList(currentPlayer.id)
+      // Oyuncuyu tüm slotlardan ve bekleme listesinden çıkar
+      removePlayerFromAllSlots(currentPlayer.id)
+      
+      // API'ye güncelleme gönder
+      try {
+        await fetch("/api/lobby", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "update",
+            code: lobbyCode,
+            lobbyData: {
+              teams: teams.map((team) => ({
+                ...team,
+                captains: team.captains.map((captain) =>
+                  captain?.id === currentPlayer.id ? null : captain
+                ),
+                players: team.players.map((player) =>
+                  player?.id === currentPlayer.id ? null : player
+                ),
+              })),
+              waitingList: waitingList.filter((p) => p.id !== currentPlayer.id),
+            },
+          }),
+        })
+      } catch (error) {
+        console.error("Çıkış senkronizasyon hatası:", error)
+      }
+      
       setCurrentPlayer(null)
       router.push("/")
     }

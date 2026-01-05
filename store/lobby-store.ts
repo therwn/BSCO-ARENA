@@ -25,6 +25,7 @@ interface LobbyState {
   removeFromWaitingList: (playerId: string) => void
   joinTeamSlot: (teamId: string, slotType: "captain" | "player", slotIndex: number) => void
   leaveTeamSlot: (teamId: string, slotType: "captain" | "player", slotIndex: number) => void
+  removePlayerFromAllSlots: (playerId: string) => void
   updateTeamName: (teamId: string, name: string) => void
   updateTeamColor: (teamId: string, color: string) => void
   initializeTeams: () => void
@@ -131,6 +132,20 @@ export const useLobbyStore = create<LobbyState>((set) => ({
 
       return { teams: newTeams }
     }),
+
+  removePlayerFromAllSlots: (playerId) =>
+    set((state) => ({
+      teams: state.teams.map((team) => ({
+        ...team,
+        captains: team.captains.map((captain) =>
+          captain?.id === playerId ? null : captain
+        ),
+        players: team.players.map((player) =>
+          player?.id === playerId ? null : player
+        ),
+      })),
+      waitingList: state.waitingList.filter((p) => p.id !== playerId),
+    })),
 
   updateTeamName: (teamId, name) =>
     set((state) => ({
