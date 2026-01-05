@@ -36,15 +36,22 @@ declare global {
   }> | undefined
 }
 
-const lobbies = !supabase && (globalThis.lobbies || new Map<string, {
-  code: string
-  teams: any[]
-  waitingList: any[]
-  createdAt: number
-}>())
-
-if (!supabase && process.env.NODE_ENV !== "production") {
-  globalThis.lobbies = lobbies as any
+function getMemoryStore() {
+  const supabase = getSupabaseClient()
+  if (supabase) return null // Supabase varsa memory store kullanma
+  
+  const lobbies = globalThis.lobbies || new Map<string, {
+    code: string
+    teams: any[]
+    waitingList: any[]
+    createdAt: number
+  }>()
+  
+  if (process.env.NODE_ENV !== "production") {
+    globalThis.lobbies = lobbies
+  }
+  
+  return lobbies
 }
 
 // Supabase'den lobi al
@@ -84,7 +91,8 @@ async function getLobbyFromStore(code: string) {
       return null
     }
   } else {
-    return (lobbies as Map<string, any>).get(code) || null
+    const lobbies = getMemoryStore()
+    return lobbies?.get(code) || null
   }
 }
 
@@ -135,8 +143,12 @@ async function setLobbyToStore(code: string, lobby: any) {
     }
   } else {
     console.log("[Memory] Lobi kaydediliyor:", code)
-    ;(lobbies as Map<string, any>).set(code, lobby)
-    return true
+    const lobbies = getMemoryStore()
+    if (lobbies) {
+      lobbies.set(code, lobby)
+      return true
+    }
+    return false
   }
 }
 
@@ -160,7 +172,8 @@ async function getAllLobbyCodes() {
       return []
     }
   } else {
-    return Array.from((lobbies as Map<string, any>).keys())
+    const lobbies = getMemoryStore()
+    return lobbies ? Array.from(lobbies.keys()) : []
   }
 }
 
